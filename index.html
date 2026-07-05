@@ -226,7 +226,7 @@ tbody tr:hover{background:var(--bg-soft)}
 </section>
 
 <script>
-const THEME_KEY='vcl_theme', DATA_KEY='vcl_entries';
+const THEME_KEY='vcl_theme', DATA_KEY='vcl_entries', CHECKLIST_KEY='vcl_checklist';
 const tBtn=document.getElementById('theme'),root=document.documentElement;
 function setTheme(t){root.setAttribute('data-theme',t);tBtn.textContent=t==='dark'?'☀':'☾';localStorage.setItem(THEME_KEY,t);}
 setTheme(localStorage.getItem(THEME_KEY)||'dark');
@@ -282,6 +282,16 @@ async function handleFile(file){
   const width=video.videoWidth||0, height=video.videoHeight||0;
   const vertical=height>width;
 
+  // Certains navigateurs (Safari/iOS notamment) ne peignent aucune frame sur le
+  // <video> tant qu'il n'a jamais joué : sans ce cycle play/pause, chaque
+  // drawImage() ci-dessous capture une image noire.
+  try{
+    await video.play();
+    video.pause();
+    video.currentTime=0;
+    await waitEvent(video,'seeked',1000);
+  }catch(e){}
+
   const numSamples=Math.max(10,Math.min(70,Math.round(duration/0.4)));
   const diffCanvas=document.createElement('canvas'); diffCanvas.width=32; diffCanvas.height=18;
   const diffCtx=diffCanvas.getContext('2d',{willReadFrequently:true});
@@ -294,6 +304,9 @@ async function handleFile(file){
     const t=Math.min(duration-0.05,Math.max(0.05,(i+0.5)*duration/numSamples));
     video.currentTime=t;
     await waitEvent(video,'seeked',1500);
+    // Laisse le temps au moteur vidéo de réellement peindre la frame décodée
+    // avant de la capturer (le seek peut se déclencher un poil trop tôt).
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
     diffCtx.drawImage(video,0,0,diffCanvas.width,diffCanvas.height);
     const data=diffCtx.getImageData(0,0,diffCanvas.width,diffCanvas.height).data;
@@ -375,8 +388,20 @@ function currentChecklistScore(){
   const boxes=[...checklistEl.querySelectorAll('input[type=checkbox]')];
   return boxes.filter(b=>b.checked).length;
 }
-checklistEl.addEventListener('change',()=>{scoreOut.textContent=currentChecklistScore()+' / 10';});
-function resetChecklist(){checklistEl.querySelectorAll('input').forEach(b=>b.checked=false);scoreOut.textContent='0 / 10';}
+function saveChecklistState(){
+  const boxes=[...checklistEl.querySelectorAll('input[type=checkbox]')];
+  localStorage.setItem(CHECKLIST_KEY,JSON.stringify(boxes.map(b=>b.checked)));
+}
+function loadChecklistState(){
+  let saved;
+  try{saved=JSON.parse(localStorage.getItem(CHECKLIST_KEY));}catch(e){}
+  if(!Array.isArray(saved)) return;
+  checklistEl.querySelectorAll('input[type=checkbox]').forEach((b,i)=>{b.checked=!!saved[i];});
+}
+loadChecklistState();
+scoreOut.textContent=currentChecklistScore()+' / 10';
+checklistEl.addEventListener('change',()=>{scoreOut.textContent=currentChecklistScore()+' / 10';saveChecklistState();});
+function resetChecklist(){checklistEl.querySelectorAll('input').forEach(b=>b.checked=false);scoreOut.textContent='0 / 10';saveChecklistState();}
 
 /* ---------- TRACKER ---------- */
 function loadEntries(){try{return JSON.parse(localStorage.getItem(DATA_KEY))||[];}catch(e){return [];}}
