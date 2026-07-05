@@ -358,12 +358,6 @@ async function handleFile(file){
   resultsBlock.style.display='block';
 }
 
-document.getElementById('useForForm').addEventListener('click',()=>{
-  if(!lastAnalysis) return;
-  document.getElementById('f-duration').value=lastAnalysis.duration;
-  document.getElementById('form-section').scrollIntoView({behavior:'smooth',block:'start'});
-});
-
 /* ---------- CHECKLIST ---------- */
 const CHECKLIST_ITEMS=[
   "Le hook (1 à 3 premières secondes) accroche immédiatement, sans logo/intro qui fait perdre du temps",
@@ -377,11 +371,34 @@ const CHECKLIST_ITEMS=[
   "Cover / première frame attractive, lisible même en mode preview",
   "Appel à l'action clair mais pas envahissant (commenter, s'abonner, suite en commentaire...)"
 ];
+// Index des items que l'analyse technique peut mesurer directement (le reste —
+// hook, promesse, message... — est un jugement de contenu, aucune mesure ne
+// peut cocher ça à ta place).
+const CHECKLIST_RHYTHM_IDX=2, CHECKLIST_VERTICAL_IDX=7;
 const checklistEl=document.getElementById('checklist');
 CHECKLIST_ITEMS.forEach((txt,i)=>{
   const label=document.createElement('label');label.className='chk';
-  label.innerHTML=`<input type="checkbox" data-idx="${i}"><span>${txt}</span>`;
+  label.innerHTML=`<input type="checkbox" data-idx="${i}"><span>${txt}<span class="hint" id="chk-hint-${i}" style="display:block"></span></span>`;
   checklistEl.appendChild(label);
+});
+
+document.getElementById('useForForm').addEventListener('click',()=>{
+  if(!lastAnalysis) return;
+  document.getElementById('f-duration').value=lastAnalysis.duration;
+
+  const boxes=[...checklistEl.querySelectorAll('input[type=checkbox]')];
+  // Format vertical : mesure fiable, on peut cocher automatiquement.
+  boxes[CHECKLIST_VERTICAL_IDX].checked=lastAnalysis.vertical;
+  const hintVertical=document.getElementById(`chk-hint-${CHECKLIST_VERTICAL_IDX}`);
+  hintVertical.textContent=`Mesuré : ${lastAnalysis.width}×${lastAnalysis.height} (${lastAnalysis.vertical?'vertical':'non vertical'})`;
+  // Le rythme reste un jugement de contenu : on affiche juste la donnée mesurée
+  // pour t'aider à décider, sans cocher à ta place.
+  const hintRhythm=document.getElementById(`chk-hint-${CHECKLIST_RHYTHM_IDX}`);
+  hintRhythm.textContent=`Mesuré : ~${lastAnalysis.cutCount} coupes, soit 1 coupe / ${lastAnalysis.avgSecBetweenCuts.toFixed(1)}s`;
+
+  scoreOut.textContent=currentChecklistScore()+' / 10';
+  saveChecklistState();
+  document.getElementById('checklist-section').scrollIntoView({behavior:'smooth',block:'start'});
 });
 const scoreOut=document.getElementById('scoreOut');
 function currentChecklistScore(){
